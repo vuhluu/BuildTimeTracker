@@ -137,7 +137,9 @@ export type WebVisit = {
 export type DomainMeta = { cat: WebCategory; favicon: string };
 ```
 
-`TaskSession`, `AWEvent`, `AppSlice`, `Settings` are unchanged. Focus score and category are **always derived**, never persisted on the session. This keeps storage small and means tuning the formula later re-computes transparently.
+`TaskSession`, `AWEvent`, `AppSlice` are unchanged. `Settings` gains one optional field (`webBucketId: string | null`). Focus score and category are **always derived**, never persisted on the session. This keeps storage small and means tuning the formula later re-computes transparently.
+
+`TaskSession.appOrder` is removed from the type (was only consumed by the deleted `AppBreakdown`).
 
 ### Derived-data flow
 
@@ -201,11 +203,21 @@ fetchWebEvents(bucketId, from, to): WebEvent[]      // clamped to range
 ```
 When `findWebBucket` returns null, the Web tab shows an "install aw-watcher-web" empty state rather than erroring.
 
+## Styling
+
+The mock ships as one big `<style>` block with CSS custom properties (`--bg`, `--accent`, `--mono`, `--radius`, etc.) and BEM-ish class names (`d-drawer`, `c-scene`, `wk-row`). The current app is Tailwind (per `app/CLAUDE.md`).
+
+**Strategy:** keep Tailwind as the primary styling tool, but extend `tailwind.config.js` with the mock's colour tokens so Tailwind utilities resolve to the mock's palette. Load the three Google fonts (Inter, JetBrains Mono, Fraunces) via `<link>` tags in `index.html` and configure Tailwind's `fontFamily` to point at them. The body starts in the mock's "cozy density + peach accent" defaults — no class toggles, no CSS vars at runtime.
+
+Complex per-feature styles that Tailwind handles awkwardly (scene-card rails with `::before`, drawer transforms with custom cubic-bezier easing, `@media print` rules for `/report`, SVG sparkline inner paint) live in small co-located CSS modules (e.g. `features/shared/Drawer.module.css`, `features/web/WebReport.module.css`). Everything else is Tailwind classes.
+
+Reject: a wholesale port to custom CSS files. Rejecting it keeps consistency with the existing app convention and avoids a second styling system.
+
 ## UI composition
 
 ### Shared primitives
 
-**`TopNav`** — brand + 4-tab pills + AW status dot. Uses `useNavigate` + `useLocation` for active-tab highlighting. Dot is green when the store's `awConnected === true`; red with tooltip otherwise.
+**`TopNav`** — brand + 4-tab pills + AW status dot. Uses `useNavigate` + `useLocation` for active-tab highlighting. Dot state derives from the existing store: green when `settings.bucketId != null && settings.lastError == null`, red with `lastError` as tooltip otherwise, grey during the initial `refreshBucket()` resolve.
 
 **`CommandBar`** — full-screen overlay, portal-ed to `document.body`. Items: task-list (fuzzy match on `session.name`), view jumps (Today/Week/Aggregate/Web), "Export CSV" scoped to the current view. Arrow keys navigate, Enter fires, Esc closes. Opened via a top-level `useCommandBar()` hook any view can call.
 
@@ -236,9 +248,18 @@ TopNav
 
 `TodayPage` owns `selectedId`, `catFilter`, `cmdOpen` as local state (not in the store). Keyboard handler registered in a `useEffect`: `⌘K` toggles cmd, `Esc` closes (cmd first, then drawer), `j`/`k` advance `selectedId`. Input-focus guard blocks `j`/`k` when an `<input>` or `<textarea>` is focused.
 
+**Category filter semantics:** `catFilter === 'all'` shows every session. Otherwise, a session is shown when **any** of its events belongs to the selected category (matches the mock's `session.events.some(e => appCategory(e.data.app) === catFilter)`). This keeps mixed-category sessions visible from multiple chips.
+
 **ActiveCard — two render branches:**
 - `activeSession == null`: text input, "Start task" button, Recent chips (last 5 unique names from completed sessions). Enter in input calls `store.startTask(name)`.
-- `activeSession` present: live timer (1 s interval, same pattern as current `TaskTimer`), current app/title/start time, "Stop" button (calls `store.stopActive()`), "Inspect this task →" button (sets `selectedId = active.id`).
+- `activeSession` present: live timer (1 s interval, same pattern as current `TaskTimer`), task name, start time, "Stop" button (calls `store.stopActive()`), "Inspect this task →" button (sets `selectedId = active.id`).
+
+**Live AW events during an active session — not in scope.** The current app fetches events only on `stopActive`. The mock's "Currently in Notion · Releases / v1.4" line implies polling; we won't add that in v1. Instead:
+- The active card shows timer + task name + start time. No "Currently in" line.
+- Opening the drawer on the active session shows the header, timer, and a placeholder: *"This task is in progress. App breakdown and event log will appear when you stop."* Mini-stats row hidden. Rename + Stop buttons still work.
+- `contextSwitches` and the hero focus score count only completed sessions (matches current behavior).
+
+A future "live poll every 10 s" pass is a clean additive change inside `ActiveCard` and `SceneDrawer` — listed under deferred.
 
 ### Week tab
 
@@ -320,5 +341,6 @@ Standalone printable. No `TopNav`, `Drawer`, or `CommandBar`. Reads `?from=&to=`
 - Tweaks panel (density, accent swap)
 - JSON import / export
 - Drag-to-reorder app breakdown
+- Live AW-event polling during an active session ("Currently in [app]" line + live breakdown in drawer)
 
 These are explicitly deferred — not forgotten. The spec's data model and component boundaries keep them cheap to add later without rework.
