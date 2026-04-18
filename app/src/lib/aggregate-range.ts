@@ -130,14 +130,29 @@ export function dailyTotals(
 }
 
 /**
- * Matrix of seconds per task × day. Rows are sorted by total desc.
+ * Detail for a single (task, day) cell — used to power richer heatmap
+ * tooltips without re-iterating sessions per cell at render time.
+ */
+export type TaskDayCell = {
+  seconds: number;
+  sessionCount: number;
+  topApp: string | null;
+  topAppPct: number; // 0..100
+};
+
+/**
+ * Matrix of per-task × per-day cells. Rows are sorted by total desc.
  */
 export type TaskDayMatrix = {
   days: string[];
-  rows: { name: string; perDay: Record<string, number>; total: number }[];
+  rows: { name: string; perDay: Record<string, TaskDayCell>; total: number }[];
   dayTotals: Record<string, number>;
   grandTotal: number;
 };
+
+function emptyCell(): TaskDayCell {
+  return { seconds: 0, sessionCount: 0, topApp: null, topAppPct: 0 };
+}
 
 export function taskDayMatrix(
   sessions: TaskSession[],
@@ -148,33 +163,87 @@ export function taskDayMatrix(
   const rangeStart = new Date(rangeStartIso).getTime();
   const rangeEnd = new Date(rangeEndIso).getTime();
 
-  const grouped = new Map<string, Record<string, number>>();
+  // Intermediate: per-task per-day seconds + session count + per-app seconds.
+  type Acc = {
+    seconds: number;
+    sessionCount: number;
+    appSecs: Map<string, number>;
+  };
+  const grouped = new Map<string, Record<string, Acc>>();
+
   for (const s of sessions) {
     const clipped = clampSessionToRange(s, rangeStart, rangeEnd);
     if (!clipped) continue;
     let perDay = grouped.get(s.name);
     if (!perDay) {
-      perDay = Object.fromEntries(days.map((d) => [d, 0]));
+      perDay = Object.fromEntries(
+        days.map((d) => [
+          d,
+          { seconds: 0, sessionCount: 0, appSecs: new Map<string, number>() } as Acc,
+        ]),
+      );
       grouped.set(s.name, perDay);
     }
+    // Which days did this session touch? Split its duration across them and
+    // count the session against each touched day exactly once.
+    const touchedDays = new Set<string>();
     let cursor = clipped.start;
     while (cursor < clipped.end) {
       const dayStart = startOfLocalDay(new Date(cursor)).getTime();
       const dayEnd = dayStart + 24 * 60 * 60 * 1000;
       const segEnd = Math.min(clipped.end, dayEnd);
       const key = dayKey(new Date(cursor));
-      if (key in perDay) perDay[key] += (segEnd - cursor) / 1000;
+      if (key in perDay) {
+        perDay[key].seconds += (segEnd - cursor) / 1000;
+        touchedDays.add(key);
+        // Attribute AW events to this day by clamping each to [cursor, segEnd].
+        for (const ev of s.events) {
+          const evStart = new Date(ev.timestamp).getTime();
+          const evEnd = evStart + ev.duration * 1000;
+          const cs = Math.max(evStart, cursor);
+          const ce = Math.min(evEnd, segEnd);
+          const secs = Math.max(0, (ce - cs) / 1000);
+          if (secs <= 0) continue;
+          perDay[key].appSecs.set(
+            ev.data.app,
+            (perDay[key].appSecs.get(ev.data.app) ?? 0) + secs,
+          );
+        }
+      }
       cursor = segEnd;
     }
+    for (const k of touchedDays) perDay[k].sessionCount += 1;
   }
 
   const dayTotals: Record<string, number> = Object.fromEntries(
     days.map((d) => [d, 0]),
   );
   const rows = [...grouped.entries()]
-    .map(([name, perDay]) => {
-      const total = Object.values(perDay).reduce((a, b) => a + b, 0);
-      for (const d of days) dayTotals[d] += perDay[d];
+    .map(([name, acc]) => {
+      const perDay: Record<string, TaskDayCell> = Object.fromEntries(
+        days.map((d) => [d, emptyCell()]),
+      );
+      let total = 0;
+      for (const d of days) {
+        const a = acc[d];
+        const appTotal = Array.from(a.appSecs.values()).reduce((x, y) => x + y, 0);
+        let topApp: string | null = null;
+        let topAppSecs = 0;
+        for (const [app, secs] of a.appSecs.entries()) {
+          if (secs > topAppSecs) {
+            topApp = app;
+            topAppSecs = secs;
+          }
+        }
+        perDay[d] = {
+          seconds: a.seconds,
+          sessionCount: a.sessionCount,
+          topApp,
+          topAppPct: appTotal > 0 ? (topAppSecs / appTotal) * 100 : 0,
+        };
+        total += a.seconds;
+        dayTotals[d] += a.seconds;
+      }
       return { name, perDay, total };
     })
     .sort((a, b) => b.total - a.total);
@@ -231,7 +300,7 @@ export function recurringTasks(
 
   const out: RecurringTask[] = [];
   for (const row of matrix.rows) {
-    const daysActive = days.filter((d) => (row.perDay[d] ?? 0) > 0).length;
+    const daysActive = days.filter((d) => (row.perDay[d]?.seconds ?? 0) > 0).length;
     if (daysActive < 2) continue;
     const durations = perSessionDurations.get(row.name) ?? [];
     if (durations.length === 0) continue;
@@ -247,7 +316,7 @@ export function recurringTasks(
       avgSec: total / durations.length,
       bestSec: Math.min(...durations),
       worstSec: Math.max(...durations),
-      perDaySec: days.map((d) => row.perDay[d] ?? 0),
+      perDaySec: days.map((d) => row.perDay[d]?.seconds ?? 0),
       priorTotalSec: prior,
       deltaPct,
     });

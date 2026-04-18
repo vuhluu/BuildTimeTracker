@@ -72,8 +72,11 @@ describe('taskDayMatrix', () => {
     ];
     const m = taskDayMatrix(sessions, dayStart('2026-04-13'), dayEnd('2026-04-14'));
     expect(m.rows.map((r) => r.name)).toEqual(['A', 'B']);
-    expect(m.rows[0].perDay['2026-04-13']).toBe(3600);
-    expect(m.rows[0].perDay['2026-04-14']).toBe(1800);
+    expect(m.rows[0].perDay['2026-04-13'].seconds).toBe(3600);
+    expect(m.rows[0].perDay['2026-04-13'].sessionCount).toBe(1);
+    expect(m.rows[0].perDay['2026-04-13'].topApp).toBe('VS Code');
+    expect(m.rows[0].perDay['2026-04-13'].topAppPct).toBeCloseTo(100, 1);
+    expect(m.rows[0].perDay['2026-04-14'].seconds).toBe(1800);
     expect(m.rows[0].total).toBe(5400);
     expect(m.dayTotals['2026-04-13']).toBe(3600 + 900);
     expect(m.grandTotal).toBe(3600 + 1800 + 900);

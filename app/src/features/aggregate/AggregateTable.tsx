@@ -59,7 +59,7 @@ export function exportHeatmapCsv(
   const tableRows = matrix.rows.map((r) => [
     r.name,
     ...matrix.days.map((d) => {
-      const sec = r.perDay[d] ?? 0;
+      const sec = r.perDay[d]?.seconds ?? 0;
       return sec > 0 ? formatDuration(sec) : '';
     }),
     formatDuration(r.total),

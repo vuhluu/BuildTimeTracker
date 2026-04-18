@@ -465,7 +465,7 @@ export function AggregatePage() {
               <div>
                 <h2 className="font-serif text-2xl">Time by task × day</h2>
                 <p className="text-sm text-muted mt-1">
-                  Minutes per task. Hover to inspect.
+                  Minutes per task. Hover a cell for session count and top app.
                 </p>
               </div>
               <button

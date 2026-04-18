@@ -1,9 +1,26 @@
-import type { TaskDayMatrix } from '../../lib/aggregate-range';
+import type { TaskDayCell, TaskDayMatrix } from '../../lib/aggregate-range';
 import { formatDurationShort } from '../../lib/time';
 
 export type TaskDayHeatmapProps = {
   matrix: TaskDayMatrix;
 };
+
+function cellTooltip(taskName: string, dayKey: string, cell: TaskDayCell): string {
+  if (cell.seconds <= 0) return '';
+  const dt = new Date(dayKey + 'T00:00:00');
+  const when = dt.toLocaleDateString(undefined, {
+    weekday: 'short',
+    month: 'short',
+    day: 'numeric',
+  });
+  const dur = formatDurationShort(cell.seconds);
+  const sessions = `${cell.sessionCount} session${cell.sessionCount === 1 ? '' : 's'}`;
+  const top =
+    cell.topApp != null && cell.topAppPct > 0
+      ? ` · top app ${cell.topApp} (${cell.topAppPct.toFixed(0)}%)`
+      : '';
+  return `${taskName} · ${when}\n${dur} · ${sessions}${top}`;
+}
 
 export function TaskDayHeatmap({ matrix }: TaskDayHeatmapProps) {
   const { days, rows, dayTotals, grandTotal } = matrix;
@@ -15,14 +32,12 @@ export function TaskDayHeatmap({ matrix }: TaskDayHeatmapProps) {
     );
   }
 
-  // Heatmap scale: per-cell seconds, relative to the max cell across the matrix.
   let maxCell = 0;
-  for (const r of rows) for (const d of days) maxCell = Math.max(maxCell, r.perDay[d] ?? 0);
+  for (const r of rows) for (const d of days) maxCell = Math.max(maxCell, r.perDay[d]?.seconds ?? 0);
 
   function cellBg(sec: number): string {
     if (sec <= 0 || maxCell === 0) return 'transparent';
-    const t = sec / maxCell; // 0..1
-    // peach gradient: 0.1 alpha → 0.9
+    const t = sec / maxCell;
     const alpha = 0.1 + t * 0.8;
     return `rgba(251, 191, 36, ${alpha.toFixed(2)})`;
   }
@@ -55,13 +70,14 @@ export function TaskDayHeatmap({ matrix }: TaskDayHeatmapProps) {
             <tr key={r.name}>
               <td className="px-3 py-1.5 text-ink-2 whitespace-nowrap">{r.name}</td>
               {days.map((d) => {
-                const sec = r.perDay[d] ?? 0;
+                const cell = r.perDay[d];
+                const sec = cell?.seconds ?? 0;
                 return (
                   <td
                     key={d}
                     className="text-center px-2 py-1.5 font-mono text-[11px]"
                     style={{ background: cellBg(sec) }}
-                    title={sec > 0 ? formatDurationShort(sec) : undefined}
+                    title={cell ? cellTooltip(r.name, d, cell) : undefined}
                   >
                     {sec > 0 ? (
                       <span className="text-ink">{Math.round(sec / 60)}m</span>
