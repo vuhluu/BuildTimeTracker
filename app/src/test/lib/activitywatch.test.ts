@@ -2,6 +2,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   ActivityWatchError,
   fetchEvents,
+  fetchWebEvents,
+  findWebBucket,
   findWindowBucket,
   listBuckets,
 } from '../../lib/activitywatch';
@@ -68,5 +70,42 @@ describe('activitywatch client', () => {
       vi.fn().mockRejectedValue(new Error('ECONNREFUSED')),
     );
     await expect(listBuckets()).rejects.toBeInstanceOf(ActivityWatchError);
+  });
+
+  it('findWebBucket returns the first aw-watcher-web bucket id', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        jsonResponse({
+          'aw-watcher-window_host': { id: 'aw-watcher-window_host', client: 'aw-watcher-window', type: 'currentwindow', hostname: 'host' },
+          'aw-watcher-web-chrome_host': { id: 'aw-watcher-web-chrome_host', client: 'aw-watcher-web', type: 'web.tab.current', hostname: 'host' },
+        }),
+      ),
+    );
+    expect(await findWebBucket()).toBe('aw-watcher-web-chrome_host');
+  });
+
+  it('findWebBucket returns null when no aw-watcher-web bucket exists', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonResponse({})));
+    expect(await findWebBucket()).toBeNull();
+  });
+
+  it('fetchWebEvents returns the event array from the AW response', async () => {
+    const events = [
+      {
+        id: 1,
+        timestamp: '2026-04-18T09:00:00.000Z',
+        duration: 60,
+        data: { url: 'https://github.com', title: 'GitHub' },
+      },
+    ];
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonResponse(events)));
+    const got = await fetchWebEvents(
+      'aw-watcher-web-chrome_host',
+      '2026-04-18T00:00:00.000Z',
+      '2026-04-19T00:00:00.000Z',
+    );
+    expect(got).toHaveLength(1);
+    expect(got[0].data.url).toBe('https://github.com');
   });
 });

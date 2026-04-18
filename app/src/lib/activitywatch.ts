@@ -1,4 +1,4 @@
-import type { AWEvent } from '../types';
+import type { AWEvent, WebEvent } from '../types';
 
 const BASE = '/aw/api/0';
 
@@ -54,6 +54,29 @@ export async function fetchEvents(
     limit: '5000',
   });
   return request<AWEvent[]>(
+    `/buckets/${encodeURIComponent(bucketId)}/events?${params.toString()}`,
+  );
+}
+
+export async function findWebBucket(): Promise<string | null> {
+  const buckets = await listBuckets();
+  const match = Object.values(buckets).find(
+    (b) => b.client === 'aw-watcher-web',
+  );
+  return match?.id ?? null;
+}
+
+export async function fetchWebEvents(
+  bucketId: string,
+  startIso: string,
+  endIso: string,
+): Promise<WebEvent[]> {
+  const params = new URLSearchParams({
+    start: startIso,
+    end: endIso,
+    limit: '5000',
+  });
+  return request<WebEvent[]>(
     `/buckets/${encodeURIComponent(bucketId)}/events?${params.toString()}`,
   );
 }
