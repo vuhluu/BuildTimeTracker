@@ -60,8 +60,10 @@ export async function fetchEvents(
 
 export async function findWebBucket(): Promise<string | null> {
   const buckets = await listBuckets();
-  const match = Object.values(buckets).find(
-    (b) => b.client === 'aw-watcher-web',
+  // AW registers per-browser web watchers as aw-watcher-web-chrome,
+  // aw-watcher-web-firefox, aw-watcher-web-edge, etc. Match any of them.
+  const match = Object.values(buckets).find((b) =>
+    b.client.startsWith('aw-watcher-web'),
   );
   return match?.id ?? null;
 }
