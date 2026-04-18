@@ -17,7 +17,7 @@ import {
   topAppsInRange,
 } from '../../lib/aggregate-range';
 import { dayFocusScore, moodClass } from '../../lib/focus';
-import { AggregateTable } from './AggregateTable';
+import { AggregateTable, exportAggregateCsv } from './AggregateTable';
 import { DailyTotalsChart } from './DailyTotalsChart';
 import { TopAppsList } from './TopAppsList';
 import { DeltaBadge } from './TopAppsList';
@@ -464,9 +464,21 @@ export function AggregatePage() {
                   Minutes per task. Hover to inspect.
                 </p>
               </div>
-              <AggregateTable rows={rows} />
+              <button
+                type="button"
+                onClick={() => exportAggregateCsv(rows)}
+                disabled={rows.length === 0}
+                className="px-3 py-1.5 rounded-lg text-xs font-medium text-ink-2 border border-line-2 hover:text-ink hover:border-muted-2 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                ⤓ Export CSV
+              </button>
             </div>
             <TaskDayHeatmap matrix={matrix} />
+            {rows.length > 0 && (
+              <div className="mt-8">
+                <AggregateTable rows={rows} />
+              </div>
+            )}
           </section>
 
           {/* Browsing */}

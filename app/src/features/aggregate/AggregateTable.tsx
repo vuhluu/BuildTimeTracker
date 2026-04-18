@@ -3,17 +3,10 @@ import { downloadCsv, toCsv } from '../../lib/csv';
 import { formatDuration } from '../../lib/time';
 import type { AggregatedRow } from '../../lib/aggregate-range';
 
-export type AggregateTableProps = {
-  rows: AggregatedRow[];
-};
-
-export function AggregateTable({ rows }: AggregateTableProps) {
-  const appColumns = useMemo(() => {
-    const set = new Set<string>();
-    for (const r of rows) for (const s of r.breakdown) set.add(s.app);
-    return Array.from(set).sort();
-  }, [rows]);
-
+function buildCsv(rows: AggregatedRow[]): { headers: string[]; tableRows: string[][] } {
+  const set = new Set<string>();
+  for (const r of rows) for (const s of r.breakdown) set.add(s.app);
+  const appColumns = Array.from(set).sort();
   const headers = [
     'Task',
     'Total',
@@ -21,11 +14,8 @@ export function AggregateTable({ rows }: AggregateTableProps) {
     'Avg session',
     ...appColumns.map((a) => `${a} %`),
   ];
-
   const tableRows = rows.map((r) => {
-    const percentByApp = new Map(
-      r.breakdown.map((s) => [s.app, s.percent] as const),
-    );
+    const percentByApp = new Map(r.breakdown.map((s) => [s.app, s.percent] as const));
     return [
       r.name,
       formatDuration(r.totalSec),
@@ -37,24 +27,41 @@ export function AggregateTable({ rows }: AggregateTableProps) {
       }),
     ];
   });
+  return { headers, tableRows };
+}
 
-  function handleExport() {
-    const csv = toCsv(headers, tableRows);
-    downloadCsv(
-      `buildtimetracker-${new Date().toISOString().slice(0, 10)}.csv`,
-      csv,
-    );
-  }
+/** Imperative helper used by aggregate-section header buttons. */
+export function exportAggregateCsv(
+  rows: AggregatedRow[],
+  rangeLabel?: string,
+): void {
+  const { headers, tableRows } = buildCsv(rows);
+  const csv = toCsv(headers, tableRows);
+  const stamp =
+    rangeLabel ?? new Date().toISOString().slice(0, 10);
+  downloadCsv(`buildtimetracker-${stamp}.csv`, csv);
+}
+
+export type AggregateTableProps = {
+  rows: AggregatedRow[];
+};
+
+/**
+ * Full task × app % table, rendered below the heatmap when users want the
+ * raw numbers. Ships its own "Export CSV" button.
+ */
+export function AggregateTable({ rows }: AggregateTableProps) {
+  const { headers, tableRows } = useMemo(() => buildCsv(rows), [rows]);
+
+  if (rows.length === 0) return null;
 
   return (
     <div>
       <div className="mb-2 flex items-center justify-between">
-        <h3 className="text-xs tracking-[0.14em] uppercase text-muted">
-          Table
-        </h3>
+        <h3 className="text-xs tracking-[0.14em] uppercase text-muted">Table</h3>
         <button
           type="button"
-          onClick={handleExport}
+          onClick={() => exportAggregateCsv(rows)}
           className="px-3 py-1.5 rounded-md text-xs font-medium text-ink-2 border border-line-2 hover:text-ink hover:border-muted-2"
         >
           ⤓ Export CSV
