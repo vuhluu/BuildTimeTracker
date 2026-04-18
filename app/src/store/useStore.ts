@@ -1,9 +1,10 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import type { Settings, TaskSession } from '../types';
+import type { Category, Settings, TaskSession } from '../types';
 import {
   ActivityWatchError,
   fetchEvents,
+  findWebBucket,
   findWindowBucket,
 } from '../lib/activitywatch';
 
@@ -11,14 +12,20 @@ type StoreState = {
   sessions: TaskSession[];
   activeSessionId: string | null;
   settings: Settings;
+  categoryOverrides: Record<string, Category>;
   startTask: (name: string) => Promise<void>;
   stopActive: () => Promise<void>;
-  setAppOrder: (sessionId: string, order: string[]) => void;
+  renameSession: (id: string, name: string) => void;
   refreshBucket: () => Promise<void>;
-  importJson: (text: string) => void;
-  exportJson: () => string;
+  refreshWebBucket: () => Promise<void>;
   clearError: () => void;
   reset: () => void;
+};
+
+const DEFAULT_SETTINGS: Settings = {
+  bucketId: null,
+  webBucketId: null,
+  lastError: null,
 };
 
 function newId(): string {
@@ -33,7 +40,8 @@ export const useStore = create<StoreState>()(
     (set, get) => ({
       sessions: [],
       activeSessionId: null,
-      settings: { bucketId: null, lastError: null },
+      settings: DEFAULT_SETTINGS,
+      categoryOverrides: {},
 
       async startTask(name) {
         const trimmed = name.trim();
@@ -91,10 +99,12 @@ export const useStore = create<StoreState>()(
         }));
       },
 
-      setAppOrder(sessionId, order) {
+      renameSession(id, name) {
+        const trimmed = name.trim();
+        if (!trimmed) return;
         set((s) => ({
           sessions: s.sessions.map((sess) =>
-            sess.id === sessionId ? { ...sess, appOrder: order } : sess,
+            sess.id === id ? { ...sess, name: trimmed } : sess,
           ),
         }));
       },
@@ -118,29 +128,23 @@ export const useStore = create<StoreState>()(
         }
       },
 
-      importJson(text) {
-        const parsed = JSON.parse(text) as Partial<StoreState>;
-        if (!parsed || typeof parsed !== 'object') {
-          throw new Error('Invalid JSON: expected object');
+      async refreshWebBucket() {
+        try {
+          const webBucketId = await findWebBucket();
+          set((s) => ({
+            settings: { ...s.settings, webBucketId },
+          }));
+        } catch (err) {
+          set((s) => ({
+            settings: {
+              ...s.settings,
+              lastError:
+                err instanceof ActivityWatchError
+                  ? err.message
+                  : (err as Error).message,
+            },
+          }));
         }
-        if (!Array.isArray(parsed.sessions)) {
-          throw new Error('Invalid JSON: missing sessions array');
-        }
-        set({
-          sessions: parsed.sessions as TaskSession[],
-          activeSessionId: parsed.activeSessionId ?? null,
-          settings:
-            parsed.settings ?? { bucketId: null, lastError: null },
-        });
-      },
-
-      exportJson() {
-        const { sessions, activeSessionId, settings } = get();
-        return JSON.stringify(
-          { sessions, activeSessionId, settings },
-          null,
-          2,
-        );
       },
 
       clearError() {
@@ -151,7 +155,8 @@ export const useStore = create<StoreState>()(
         set({
           sessions: [],
           activeSessionId: null,
-          settings: { bucketId: null, lastError: null },
+          settings: DEFAULT_SETTINGS,
+          categoryOverrides: {},
         });
       },
     }),
@@ -161,7 +166,17 @@ export const useStore = create<StoreState>()(
         sessions: state.sessions,
         activeSessionId: state.activeSessionId,
         settings: state.settings,
+        categoryOverrides: state.categoryOverrides,
       }),
+      merge: (persisted, current) => {
+        const p = (persisted ?? {}) as Partial<StoreState>;
+        return {
+          ...current,
+          ...p,
+          settings: { ...DEFAULT_SETTINGS, ...(p.settings ?? {}) },
+          categoryOverrides: p.categoryOverrides ?? {},
+        };
+      },
     },
   ),
 );
