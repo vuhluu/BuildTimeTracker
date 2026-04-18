@@ -850,7 +850,7 @@ git commit -m "feat(week): ShippedList — per-day grouped completed tasks with 
 Create `app/src/test/features/week/WeekPage.test.tsx`:
 
 ```tsx
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { WeekPage } from '../../../features/week/WeekPage';
@@ -860,14 +860,12 @@ beforeEach(() => {
   localStorage.clear();
   useStore.getState().reset();
   // Freeze "now" to Saturday 2026-04-18 12:00 local so weekDays() / "Today"
-  // label are deterministic.
-  vi.useFakeTimers();
-  vi.setSystemTime(new Date(2026, 3, 18, 12, 0, 0));
+  // label are deterministic. Surgical: mock only Date.now, no fake timers.
+  vi.spyOn(Date, 'now').mockReturnValue(
+    new Date(2026, 3, 18, 12, 0, 0).getTime(),
+  );
 });
-
-afterEach(() => {
-  vi.useRealTimers();
-});
+// No afterEach — global setup.ts's vi.clearAllMocks() restores spies.
 
 describe('WeekPage', () => {
   it('renders the week header and three summary stats', () => {
