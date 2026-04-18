@@ -60,12 +60,18 @@ export async function fetchEvents(
 
 export async function findWebBucket(): Promise<string | null> {
   const buckets = await listBuckets();
-  // AW registers per-browser web watchers as aw-watcher-web-chrome,
-  // aw-watcher-web-firefox, aw-watcher-web-edge, etc. Match any of them.
-  const match = Object.values(buckets).find((b) =>
-    b.client.startsWith('aw-watcher-web'),
+  // The aw-watcher-web browser extension reports client=aw-client-web and
+  // type=web.tab.current. The bucket id is aw-watcher-web-<browser>[_<host>].
+  // Match on type — it's the canonical AW identifier and is stable across
+  // browsers and client-name changes. Prefer a host-suffixed id when both
+  // a generic and host-suffixed bucket exist (the host-suffixed one is
+  // usually the actively-updated per-device bucket).
+  const webBuckets = Object.values(buckets).filter(
+    (b) => b.type === 'web.tab.current',
   );
-  return match?.id ?? null;
+  if (webBuckets.length === 0) return null;
+  const hostSuffixed = webBuckets.find((b) => b.id.includes('_'));
+  return (hostSuffixed ?? webBuckets[0]).id;
 }
 
 export async function fetchWebEvents(

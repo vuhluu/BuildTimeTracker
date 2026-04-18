@@ -72,29 +72,30 @@ describe('activitywatch client', () => {
     await expect(listBuckets()).rejects.toBeInstanceOf(ActivityWatchError);
   });
 
-  it('findWebBucket matches per-browser clients like aw-watcher-web-chrome', async () => {
+  it('findWebBucket matches buckets with type=web.tab.current (client is aw-client-web in real AW)', async () => {
     vi.stubGlobal(
       'fetch',
       vi.fn().mockResolvedValue(
         jsonResponse({
           'aw-watcher-window_host': { id: 'aw-watcher-window_host', client: 'aw-watcher-window', type: 'currentwindow', hostname: 'host' },
-          'aw-watcher-web-chrome_host': { id: 'aw-watcher-web-chrome_host', client: 'aw-watcher-web-chrome', type: 'web.tab.current', hostname: 'host' },
+          'aw-watcher-web-chrome_host': { id: 'aw-watcher-web-chrome_host', client: 'aw-client-web', type: 'web.tab.current', hostname: 'host' },
         }),
       ),
     );
     expect(await findWebBucket()).toBe('aw-watcher-web-chrome_host');
   });
 
-  it('findWebBucket also matches firefox/edge variants', async () => {
+  it('findWebBucket prefers a host-suffixed bucket when both generic and suffixed exist', async () => {
     vi.stubGlobal(
       'fetch',
       vi.fn().mockResolvedValue(
         jsonResponse({
-          'aw-watcher-web-firefox_host': { id: 'aw-watcher-web-firefox_host', client: 'aw-watcher-web-firefox', type: 'web.tab.current', hostname: 'host' },
+          'aw-watcher-web-chrome': { id: 'aw-watcher-web-chrome', client: 'aw-client-web', type: 'web.tab.current', hostname: 'host' },
+          'aw-watcher-web-chrome_host': { id: 'aw-watcher-web-chrome_host', client: 'aw-client-web', type: 'web.tab.current', hostname: 'host' },
         }),
       ),
     );
-    expect(await findWebBucket()).toBe('aw-watcher-web-firefox_host');
+    expect(await findWebBucket()).toBe('aw-watcher-web-chrome_host');
   });
 
   it('findWebBucket returns null when no aw-watcher-web bucket exists', async () => {
