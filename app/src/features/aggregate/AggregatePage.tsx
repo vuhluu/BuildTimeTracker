@@ -17,7 +17,11 @@ import {
   topAppsInRange,
 } from '../../lib/aggregate-range';
 import { dayFocusScore, moodClass } from '../../lib/focus';
-import { AggregateTable, exportAggregateCsv } from './AggregateTable';
+import {
+  AggregateTable,
+  exportAggregateCsv,
+  exportHeatmapCsv,
+} from './AggregateTable';
 import { DailyTotalsChart } from './DailyTotalsChart';
 import { TopAppsList } from './TopAppsList';
 import { DeltaBadge } from './TopAppsList';
@@ -466,16 +470,35 @@ export function AggregatePage() {
               </div>
               <button
                 type="button"
-                onClick={() => exportAggregateCsv(rows)}
-                disabled={rows.length === 0}
+                onClick={() => exportHeatmapCsv(matrix)}
+                disabled={matrix.rows.length === 0}
+                title="Task × day matrix — one column per day"
                 className="px-3 py-1.5 rounded-lg text-xs font-medium text-ink-2 border border-line-2 hover:text-ink hover:border-muted-2 disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                ⤓ Export CSV
+                ⤓ Export day matrix
               </button>
             </div>
             <TaskDayHeatmap matrix={matrix} />
             {rows.length > 0 && (
               <div className="mt-8">
+                <div className="flex items-end justify-between mb-2">
+                  <div>
+                    <h3 className="text-xs tracking-[0.14em] uppercase text-muted">
+                      Task × app breakdown
+                    </h3>
+                    <p className="text-[11px] text-muted-2 mt-0.5">
+                      Per-app share of each task's time.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => exportAggregateCsv(rows)}
+                    title="Task × app summary — one column per app"
+                    className="px-3 py-1.5 rounded-lg text-xs font-medium text-ink-2 border border-line-2 hover:text-ink hover:border-muted-2"
+                  >
+                    ⤓ Export app breakdown
+                  </button>
+                </div>
                 <AggregateTable rows={rows} />
               </div>
             )}
