@@ -4,21 +4,10 @@ Personal task timer that correlates self-reported tasks with [ActivityWatch](htt
 
 ## Design & live demo
 
-The current UI is **Direction D** of a four-direction design exploration (A–D, plus a tweaks panel for density and accent color). The entire exploration is a single self-contained HTML file with mock data baked in — no build step required.
+The UI is **Direction D** of a four-direction design exploration. The mockup below is a single self-contained HTML file with baked-in mock data — no build step required — and shows the same layout, interactions, and visual system as the app you run locally.
 
 - **👉 Interactive mockup:** https://vuhluu.github.io/BuildTimeTracker/design-mockup.html
 - **Source:** [`design-mockup.html`](./design-mockup.html) at the repo root.
-
-Open the mockup — the **Tweaks** panel auto-opens in the bottom-right. Use it to flip between:
-
-| Direction | Feel |
-|---|---|
-| **A · Refined** | Centered dashboard, hero card, pill tabs |
-| **B · Editor** | IDE-style sidebar + main + inspector |
-| **C · Ribbon** | Wide horizontal scenes of the day |
-| **D · Ribbon + drawer** | **← shipped.** Scenes + slide-in drawer + ⌘K |
-
-Plus density (cozy / dense) and accent (sky / mint / peach / violet) toggles. The mockup's data is static, but the layout, interactions, and visual system map 1:1 to the app you run locally.
 
 ## Quick start
 
