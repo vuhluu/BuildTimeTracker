@@ -40,3 +40,12 @@ export function parseDateTimeLocal(value: string): Date {
   // datetime-local is always in local time, no offset
   return new Date(value);
 }
+
+export function formatDurationShort(seconds: number): string {
+  const s = Math.max(0, Math.round(seconds));
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  if (h > 0) return `${h}h ${m}m`;
+  if (m > 0) return `${m}m`;
+  return `${s}s`;
+}
