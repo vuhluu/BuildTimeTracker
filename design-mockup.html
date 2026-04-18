@@ -1197,6 +1197,10 @@ kbd {
   // Announce availability
   if (window.parent !== window) {
     window.parent.postMessage({ type: "__edit_mode_available" }, "*");
+  } else {
+    // Standalone mode (e.g. GitHub Pages demo): auto-open the tweaks panel
+    // so visitors can switch between directions / densities / accents.
+    tweaksEl.classList.add("open");
   }
 
   // Initial apply
