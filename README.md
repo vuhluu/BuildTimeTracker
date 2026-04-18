@@ -9,7 +9,7 @@ The current UI is **Direction D** of a four-direction design exploration (A–D,
 - **👉 Interactive mockup:** https://vuhluu.github.io/BuildTimeTracker/design-mockup.html
 - **Source:** [`design-mockup.html`](./design-mockup.html) at the repo root.
 
-Open the mockup, click the **⚙︎ Tweaks** panel in the bottom-right (or the tweak shortcut — `Cmd+.` / `Ctrl+.`) to flip between:
+Open the mockup — the **Tweaks** panel auto-opens in the bottom-right. Use it to flip between:
 
 | Direction | Feel |
 |---|---|
