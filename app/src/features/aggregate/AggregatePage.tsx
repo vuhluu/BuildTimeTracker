@@ -4,14 +4,35 @@ import {
   parseDateTimeLocal,
   startOfLocalDay,
   toDateTimeLocalValue,
-  formatDuration,
   formatDurationShort,
 } from '../../lib/time';
-import { aggregateSessions } from '../../lib/aggregate-range';
+import { startOfWeek, addDays, dayKey } from '../../lib/week';
+import {
+  aggregateSessions,
+  dailyTotals,
+  daysInRange,
+  priorRangeOf,
+  recurringTasks,
+  taskDayMatrix,
+  topAppsInRange,
+} from '../../lib/aggregate-range';
+import { dayFocusScore, moodClass } from '../../lib/focus';
 import { AggregateTable } from './AggregateTable';
-import { appColor } from '../../lib/colors';
+import { DailyTotalsChart } from './DailyTotalsChart';
+import { TopAppsList } from './TopAppsList';
+import { DeltaBadge } from './TopAppsList';
+import { RecurringTasksTable } from './RecurringTasksTable';
+import { TaskDayHeatmap } from './TaskDayHeatmap';
+import { BrowsingSection } from './BrowsingSection';
 
-type Preset = 'today' | 'yesterday' | '7d' | '30d' | 'custom';
+type Preset =
+  | 'today'
+  | 'yesterday'
+  | 'this-week'
+  | 'last-week'
+  | '7d'
+  | '30d'
+  | 'custom';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -25,16 +46,21 @@ function presetRange(p: Preset, now: Date): { from: Date; to: Date } | null {
       const y = new Date(startToday.getTime() - DAY_MS);
       return { from: y, to: new Date(y.getTime() + DAY_MS - 1) };
     }
+    case 'this-week': {
+      const mon = startOfWeek(startToday);
+      const sun = new Date(addDays(mon, 6).getTime() + DAY_MS - 1);
+      return { from: mon, to: sun };
+    }
+    case 'last-week': {
+      const mon = startOfWeek(startToday);
+      const lastMon = addDays(mon, -7);
+      const lastSun = new Date(addDays(lastMon, 6).getTime() + DAY_MS - 1);
+      return { from: lastMon, to: lastSun };
+    }
     case '7d':
-      return {
-        from: new Date(startToday.getTime() - 6 * DAY_MS),
-        to: endToday,
-      };
+      return { from: new Date(startToday.getTime() - 6 * DAY_MS), to: endToday };
     case '30d':
-      return {
-        from: new Date(startToday.getTime() - 29 * DAY_MS),
-        to: endToday,
-      };
+      return { from: new Date(startToday.getTime() - 29 * DAY_MS), to: endToday };
     case 'custom':
       return null;
   }
@@ -43,12 +69,17 @@ function presetRange(p: Preset, now: Date): { from: Date; to: Date } | null {
 export function AggregatePage() {
   const sessions = useStore((s) => s.sessions);
 
-  const [preset, setPreset] = useState<Preset>('today');
-  const [start, setStart] = useState(() =>
-    toDateTimeLocalValue(startOfLocalDay()),
-  );
-  const [end, setEnd] = useState(() => toDateTimeLocalValue(new Date()));
+  const [preset, setPreset] = useState<Preset>('this-week');
+  const [start, setStart] = useState(() => {
+    const r = presetRange('this-week', new Date(Date.now()));
+    return toDateTimeLocalValue(r!.from);
+  });
+  const [end, setEnd] = useState(() => {
+    const r = presetRange('this-week', new Date(Date.now()));
+    return toDateTimeLocalValue(r!.to);
+  });
   const [taskFilter, setTaskFilter] = useState('');
+  const [compare, setCompare] = useState(true);
 
   function applyPreset(p: Preset) {
     setPreset(p);
@@ -59,6 +90,19 @@ export function AggregatePage() {
     }
   }
 
+  const startIso = useMemo(() => {
+    const d = parseDateTimeLocal(start);
+    return isNaN(d.getTime()) ? null : d.toISOString();
+  }, [start]);
+  const endIso = useMemo(() => {
+    const d = parseDateTimeLocal(end);
+    return isNaN(d.getTime()) ? null : d.toISOString();
+  }, [end]);
+  const priorRange = useMemo(
+    () => (startIso && endIso ? priorRangeOf(startIso, endIso) : null),
+    [startIso, endIso],
+  );
+
   const distinctNames = useMemo(() => {
     const set = new Set<string>();
     for (const s of sessions) set.add(s.name);
@@ -66,65 +110,216 @@ export function AggregatePage() {
   }, [sessions]);
 
   const rows = useMemo(() => {
-    const sDate = parseDateTimeLocal(start);
-    const eDate = parseDateTimeLocal(end);
-    if (isNaN(sDate.getTime()) || isNaN(eDate.getTime())) return [];
+    if (!startIso || !endIso) return [];
+    return aggregateSessions(sessions, startIso, endIso, taskFilter || undefined);
+  }, [sessions, startIso, endIso, taskFilter]);
+
+  const priorRows = useMemo(() => {
+    if (!compare || !priorRange) return [];
     return aggregateSessions(
       sessions,
-      sDate.toISOString(),
-      eDate.toISOString(),
+      priorRange.startIso,
+      priorRange.endIso,
       taskFilter || undefined,
     );
-  }, [sessions, start, end, taskFilter]);
+  }, [compare, priorRange, sessions, taskFilter]);
 
-  const maxTotal = rows.reduce((acc, r) => Math.max(acc, r.totalSec), 0);
+  const days = useMemo(
+    () => (startIso && endIso ? daysInRange(startIso, endIso) : []),
+    [startIso, endIso],
+  );
+  const priorDays = useMemo(
+    () =>
+      compare && priorRange
+        ? daysInRange(priorRange.startIso, priorRange.endIso)
+        : [],
+    [compare, priorRange],
+  );
+  const daily = useMemo(
+    () => (startIso && endIso ? dailyTotals(sessions, startIso, endIso) : {}),
+    [sessions, startIso, endIso],
+  );
+  const priorDaily = useMemo(() => {
+    if (!compare || !priorRange) return null;
+    const t = dailyTotals(sessions, priorRange.startIso, priorRange.endIso);
+    return priorDays.map((d) => t[d] ?? 0);
+  }, [compare, priorRange, priorDays, sessions]);
+
+  const topApps = useMemo(() => {
+    if (!startIso || !endIso) return [];
+    return topAppsInRange(
+      sessions,
+      startIso,
+      endIso,
+      compare && priorRange ? priorRange.startIso : undefined,
+      compare && priorRange ? priorRange.endIso : undefined,
+    );
+  }, [sessions, startIso, endIso, compare, priorRange]);
+
+  const recurring = useMemo(() => {
+    if (!startIso || !endIso) return [];
+    return recurringTasks(
+      sessions,
+      startIso,
+      endIso,
+      compare && priorRange ? priorRange.startIso : undefined,
+      compare && priorRange ? priorRange.endIso : undefined,
+    );
+  }, [sessions, startIso, endIso, compare, priorRange]);
+
+  const matrix = useMemo(
+    () =>
+      startIso && endIso
+        ? taskDayMatrix(sessions, startIso, endIso)
+        : { days: [], rows: [], dayTotals: {}, grandTotal: 0 },
+    [sessions, startIso, endIso],
+  );
+
+  // KPIs
+  const nowMs = Date.now();
   const totalSec = rows.reduce((a, r) => a + r.totalSec, 0);
-  const sessionCount = rows.reduce((a, r) => a + r.sessionCount, 0);
+  const priorTotalSec = priorRows.reduce((a, r) => a + r.totalSec, 0);
+  const totalDelta =
+    compare && priorTotalSec > 0 ? (totalSec - priorTotalSec) / priorTotalSec : null;
   const taskCount = rows.length;
+
+  // Avg focus: duration-weighted over sessions fully inside the range
+  const focusScorePct = useMemo(() => {
+    if (!startIso || !endIso) return null;
+    const rs = new Date(startIso).getTime();
+    const re = new Date(endIso).getTime();
+    const inRange = sessions.filter((s) => {
+      const st = new Date(s.startedAt).getTime();
+      return st >= rs && st <= re;
+    });
+    if (inRange.length === 0) return null;
+    return dayFocusScore(inRange, nowMs);
+  }, [sessions, startIso, endIso, nowMs]);
+
+  const priorFocusScore = useMemo(() => {
+    if (!compare || !priorRange) return null;
+    const rs = new Date(priorRange.startIso).getTime();
+    const re = new Date(priorRange.endIso).getTime();
+    const inRange = sessions.filter((s) => {
+      const st = new Date(s.startedAt).getTime();
+      return st >= rs && st <= re;
+    });
+    if (inRange.length === 0) return null;
+    return dayFocusScore(inRange, nowMs);
+  }, [sessions, compare, priorRange, nowMs]);
+
+  const focusDelta =
+    focusScorePct != null && priorFocusScore != null && priorFocusScore > 0
+      ? (focusScorePct - priorFocusScore) / priorFocusScore
+      : null;
+
   const topTask = rows[0]?.name ?? '—';
+  const topTaskSec = rows[0]?.totalSec ?? 0;
+  const topApp = topApps[0]?.app ?? '—';
+  const topAppSec = topApps[0]?.seconds ?? 0;
+
+  const todayKey = dayKey(new Date(nowMs));
+
+  // Title shaping
+  const isWeekRange = preset === 'this-week' || preset === 'last-week';
+  const title =
+    preset === 'this-week'
+      ? 'This week in review'
+      : preset === 'last-week'
+        ? 'Last week in review'
+        : preset === 'today'
+          ? 'Today'
+          : preset === 'yesterday'
+            ? 'Yesterday'
+            : preset === '7d'
+              ? 'Last 7 days'
+              : preset === '30d'
+                ? 'Last 30 days'
+                : 'Custom range';
+
+  const rangeLabel = startIso && endIso
+    ? `${start.slice(0, 10)} – ${end.slice(0, 10)}`
+    : '';
+
+  const subtitle = `${taskCount} tasks · ${formatDurationShort(totalSec)} tracked`;
 
   return (
     <main className="max-w-[1280px] mx-auto px-7 py-6">
       <header className="flex items-end justify-between gap-4 mb-6 flex-wrap">
         <div>
           <div className="text-[11px] tracking-[0.18em] uppercase text-muted">
-            {start.slice(0, 10)} – {end.slice(0, 10)}
+            Aggregate · {rangeLabel}
           </div>
           <h1 className="font-serif text-4xl font-normal tracking-tight mt-1">
-            Aggregate
+            {title}
           </h1>
-          <p className="text-sm text-ink-2 mt-1">
-            Totals and breakdowns across a range of days.
-          </p>
+          <p className="text-sm text-ink-2 mt-1">{subtitle}</p>
+        </div>
+        <div className="flex items-center gap-2">
+          {isWeekRange && (
+            <div className="flex bg-bg-1 border border-line rounded-lg overflow-hidden">
+              <button
+                onClick={() => applyPreset('this-week')}
+                className={`px-3 py-1.5 text-xs ${preset === 'this-week' ? 'text-ink shadow-[inset_0_-2px_0] shadow-accent' : 'text-ink-2 hover:bg-bg-2'}`}
+              >
+                This week
+              </button>
+              <button
+                onClick={() => applyPreset('last-week')}
+                className={`px-3 py-1.5 text-xs border-l border-line ${preset === 'last-week' ? 'text-ink shadow-[inset_0_-2px_0] shadow-accent' : 'text-ink-2 hover:bg-bg-2'}`}
+              >
+                Last week
+              </button>
+            </div>
+          )}
+          <label className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border border-line bg-bg-1 text-xs text-ink-2 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={compare}
+              onChange={(e) => setCompare(e.target.checked)}
+              className="accent-accent"
+            />
+            <span className="inline-flex items-center gap-1.5">
+              <span
+                className={`w-1.5 h-1.5 rounded-full ${compare ? 'bg-accent' : 'bg-muted-2'}`}
+              />
+              Compare vs prior
+            </span>
+          </label>
         </div>
       </header>
 
-      <div className="flex flex-wrap items-center gap-2 mb-5">
+      {/* Controls */}
+      <div className="flex flex-wrap items-center gap-2 mb-6">
         <div className="flex bg-bg-1 border border-line rounded-lg overflow-hidden">
-          {(['today', 'yesterday', '7d', '30d'] as const).map((p) => (
+          {(['this-week', 'last-week', 'today', 'yesterday', '7d', '30d'] as const).map((p) => (
             <button
               key={p}
               onClick={() => applyPreset(p)}
               className={[
                 'px-3 py-1.5 text-xs border-r border-line last:border-r-0',
                 preset === p
-                  ? 'bg-bg-3 text-ink shadow-[inset_0_-2px_0] shadow-accent'
+                  ? 'bg-bg-3 text-ink'
                   : 'text-ink-2 hover:bg-bg-2',
               ].join(' ')}
             >
-              {p === 'today'
-                ? 'Today'
-                : p === 'yesterday'
-                  ? 'Yesterday'
-                  : p === '7d'
-                    ? 'Last 7d'
-                    : 'Last 30d'}
+              {p === 'this-week'
+                ? 'This week'
+                : p === 'last-week'
+                  ? 'Last week'
+                  : p === 'today'
+                    ? 'Today'
+                    : p === 'yesterday'
+                      ? 'Yesterday'
+                      : p === '7d'
+                        ? 'Last 7d'
+                        : 'Last 30d'}
             </button>
           ))}
           <button
             onClick={() => applyPreset('custom')}
             className={[
-              'px-3 py-1.5 text-xs',
+              'px-3 py-1.5 text-xs border-l border-line',
               preset === 'custom'
                 ? 'bg-bg-3 text-ink'
                 : 'text-ink-2 hover:bg-bg-2',
@@ -173,70 +368,159 @@ export function AggregatePage() {
         </select>
       </div>
 
-      <div className="grid grid-cols-4 gap-3.5 mb-6">
-        <KpiCard label="Total tracked" value={formatDurationShort(totalSec)} />
-        <KpiCard label="Sessions" value={String(sessionCount)} />
-        <KpiCard label="Tasks" value={String(taskCount)} />
-        <KpiCard label="Top task" value={topTask} />
+      {/* KPIs */}
+      <div className="grid grid-cols-4 gap-3.5 mb-10">
+        <KpiCard
+          label="Total tracked"
+          value={formatDurationShort(totalSec)}
+          sub={`${taskCount} tasks`}
+          delta={totalDelta}
+          deltaSub={
+            totalDelta != null ? `vs ${formatDurationShort(priorTotalSec)} prior` : undefined
+          }
+        />
+        <KpiCard
+          label="Avg focus"
+          value={focusScorePct != null ? `${Math.round(focusScorePct * 100)}` : '—'}
+          suffix={focusScorePct != null ? '/100' : undefined}
+          sub={focusScorePct != null ? moodPhrase(focusScorePct) : undefined}
+          delta={focusDelta}
+          deltaSub={
+            priorFocusScore != null
+              ? `vs ${Math.round(priorFocusScore * 100)} prior`
+              : undefined
+          }
+        />
+        <KpiCard
+          label="Top task"
+          value={topTask}
+          sub={topTaskSec > 0 ? formatDurationShort(topTaskSec) : undefined}
+        />
+        <KpiCard
+          label="Top app"
+          value={topApp}
+          sub={topAppSec > 0 ? formatDurationShort(topAppSec) : undefined}
+        />
       </div>
 
-      {rows.length === 0 ? (
+      {rows.length === 0 && !compare ? (
         <p className="text-sm text-muted py-8 text-center">
           No sessions overlap the selected range.
         </p>
       ) : (
         <>
-          <ul className="mb-8 flex flex-col gap-2 list-none p-0">
-            {rows.map((r) => {
-              const widthPct =
-                maxTotal > 0 ? (r.totalSec / maxTotal) * 100 : 0;
-              return (
-                <li
-                  key={r.name}
-                  data-testid={`agg-row-${r.name}`}
-                  className="grid grid-cols-[minmax(0,180px)_minmax(0,1fr)_auto] items-center gap-3"
-                >
-                  <div className="truncate text-sm text-ink-2">{r.name}</div>
-                  <div className="h-6 rounded bg-bg-1">
-                    <div
-                      className="flex h-full overflow-hidden rounded"
-                      style={{ width: `${Math.max(2, widthPct)}%` }}
-                    >
-                      {r.breakdown.map((slice) => (
-                        <div
-                          key={slice.app}
-                          style={{
-                            width: `${slice.percent}%`,
-                            backgroundColor: appColor(slice.app),
-                          }}
-                          title={`${slice.app} · ${formatDuration(slice.seconds)}`}
-                        />
-                      ))}
-                    </div>
+          {/* Daily totals + Top apps */}
+          <div className="grid grid-cols-[1fr_360px] gap-5 mb-10">
+            <section className="bg-bg-1 border border-line rounded-lg p-5">
+              <div className="flex items-end justify-between mb-4">
+                <h2 className="font-serif text-xl">Daily totals</h2>
+                {compare && (
+                  <div className="flex gap-3 text-[11px] text-muted">
+                    <span className="inline-flex items-center gap-1.5">
+                      <span className="w-2 h-2 bg-accent rounded-sm" /> This
+                    </span>
+                    <span className="inline-flex items-center gap-1.5">
+                      <span className="w-2 h-2 bg-line-2 rounded-sm" /> Prior
+                    </span>
                   </div>
-                  <div className="whitespace-nowrap font-mono text-xs tabular-nums text-ink-2">
-                    {formatDuration(r.totalSec)} · {r.sessionCount}×
-                  </div>
-                </li>
-              );
-            })}
-          </ul>
-          <AggregateTable rows={rows} />
+                )}
+              </div>
+              <DailyTotalsChart
+                days={days}
+                current={daily}
+                prior={priorDaily}
+                todayKey={todayKey}
+              />
+            </section>
+            <section className="bg-bg-1 border border-line rounded-lg p-5">
+              <div className="flex items-end justify-between mb-4">
+                <h2 className="font-serif text-xl">Top apps</h2>
+                <div className="text-[10px] tracking-[0.14em] uppercase text-muted">
+                  {topApps.length} total
+                </div>
+              </div>
+              <TopAppsList apps={topApps} showDeltas={compare} />
+            </section>
+          </div>
+
+          {/* Recurring tasks */}
+          <section className="mb-10">
+            <div className="mb-4">
+              <h2 className="font-serif text-2xl">Recurring tasks</h2>
+              <p className="text-sm text-muted mt-1">
+                Same-name tasks appearing on 2+ days this range. Are you getting
+                faster at anything?
+              </p>
+            </div>
+            <RecurringTasksTable rows={recurring} showDeltas={compare} />
+          </section>
+
+          {/* Task × day heatmap */}
+          <section className="mb-10">
+            <div className="flex items-end justify-between mb-4">
+              <div>
+                <h2 className="font-serif text-2xl">Time by task × day</h2>
+                <p className="text-sm text-muted mt-1">
+                  Minutes per task. Hover to inspect.
+                </p>
+              </div>
+              <AggregateTable rows={rows} />
+            </div>
+            <TaskDayHeatmap matrix={matrix} />
+          </section>
+
+          {/* Browsing */}
+          {startIso && endIso && (
+            <section className="mb-10">
+              <BrowsingSection rangeStartIso={startIso} rangeEndIso={endIso} />
+            </section>
+          )}
         </>
       )}
     </main>
   );
 }
 
-function KpiCard({ label, value }: { label: string; value: string }) {
+function KpiCard({
+  label,
+  value,
+  suffix,
+  sub,
+  delta,
+  deltaSub,
+}: {
+  label: string;
+  value: string;
+  suffix?: string;
+  sub?: string;
+  delta?: number | null;
+  deltaSub?: string;
+}) {
   return (
     <div className="bg-bg-1 border border-line rounded-lg px-5 py-4">
       <div className="text-[11px] tracking-[0.14em] uppercase text-muted">
         {label}
       </div>
-      <div className="font-serif text-2xl text-ink mt-1 whitespace-nowrap overflow-hidden text-ellipsis">
+      <div className="font-serif text-3xl text-ink mt-1 whitespace-nowrap overflow-hidden text-ellipsis">
         {value}
+        {suffix && <span className="text-muted text-lg ml-1">{suffix}</span>}
       </div>
+      {sub && <div className="text-[12px] text-ink-2 mt-0.5">{sub}</div>}
+      {delta != null && (
+        <div className="mt-2 text-[11px] font-mono">
+          <DeltaBadge pct={delta} />
+          {deltaSub && <span className="text-muted ml-1.5">{deltaSub}</span>}
+        </div>
+      )}
     </div>
   );
+}
+
+function moodPhrase(score: number): string {
+  const m = moodClass(score);
+  return m === 'deep'
+    ? 'Deep period'
+    : m === 'mixed'
+      ? 'Mixed period'
+      : 'Scattered period';
 }

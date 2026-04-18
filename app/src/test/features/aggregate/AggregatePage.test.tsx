@@ -21,27 +21,44 @@ function renderPage() {
 }
 
 describe('AggregatePage', () => {
-  it('renders the header and 4 KPI labels', () => {
-    renderPage();
-    expect(screen.getByRole('heading', { name: /Aggregate/i })).toBeInTheDocument();
-    expect(screen.getByText(/Total tracked/i)).toBeInTheDocument();
-    expect(screen.getByText('Sessions')).toBeInTheDocument();
-    expect(screen.getByText('Tasks')).toBeInTheDocument();
-    expect(screen.getByText('Top task')).toBeInTheDocument();
-  });
-
-  it('shows an empty-state message when no sessions in range', () => {
+  it('defaults to "This week in review" and renders 4 KPI labels', () => {
     renderPage();
     expect(
-      screen.getByText(/No sessions overlap the selected range/i),
+      screen.getByRole('heading', { name: /This week in review/i }),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/Total tracked/i)).toBeInTheDocument();
+    expect(screen.getByText(/Avg focus/i)).toBeInTheDocument();
+    expect(screen.getByText('Top task')).toBeInTheDocument();
+    expect(screen.getByText('Top app')).toBeInTheDocument();
+  });
+
+  it('renders section headings for the richer layout', () => {
+    renderPage();
+    expect(
+      screen.getByRole('heading', { name: 'Daily totals' }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('heading', { name: 'Top apps' }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('heading', { name: 'Recurring tasks' }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('heading', { name: /Time by task × day/i }),
     ).toBeInTheDocument();
   });
 
-  it('renders preset range chips', () => {
+  it('renders the preset range chips', () => {
     renderPage();
+    expect(screen.getAllByRole('button', { name: 'This week' }).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole('button', { name: 'Last week' }).length).toBeGreaterThan(0);
     expect(screen.getByRole('button', { name: 'Today' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Yesterday' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Last 7d/i })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /Last 30d/i })).toBeInTheDocument();
+  });
+
+  it('has a Compare vs prior toggle on by default', () => {
+    renderPage();
+    const checkbox = screen.getByRole('checkbox', { name: /Compare vs prior/i });
+    expect(checkbox).toBeChecked();
   });
 });
