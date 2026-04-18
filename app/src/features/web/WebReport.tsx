@@ -49,30 +49,36 @@ export function WebReport() {
 
   if (events === null) {
     return (
-      <main className="max-w-[900px] mx-auto px-10 py-12 bg-white text-black">
-        <p>Loading…</p>
+      <main className="max-w-[900px] mx-auto px-10 py-12 bg-bg text-ink">
+        <p className="text-muted">Loading…</p>
       </main>
     );
   }
 
   return (
-    <main className="max-w-[900px] mx-auto px-10 py-12 bg-white text-black print:py-0">
+    <main className="max-w-[900px] mx-auto px-10 py-12 bg-bg text-ink print:bg-white print:text-black print:py-0">
       <style>{`
         @media print {
           html, body { background: white !important; color: black !important; }
+          main { background: white !important; color: black !important; }
           .report-no-print { display: none !important; }
           section { page-break-inside: avoid; }
           a { color: black !important; }
+          /* Override in-component dark tokens so print reads well on paper */
+          [class*="bg-bg"]   { background: white !important; }
+          [class*="text-ink"]{ color: black !important; }
+          [class*="text-muted"]{ color: #555 !important; }
+          [class*="border-line"]{ border-color: #ddd !important; }
         }
       `}</style>
 
       <header className="flex items-start justify-between mb-8">
         <div>
-          <div className="text-[11px] tracking-[0.18em] uppercase text-neutral-600">
+          <div className="text-[11px] tracking-[0.18em] uppercase text-muted">
             Web activity report
           </div>
-          <h1 className="font-serif text-4xl mt-1 text-black">Web activity</h1>
-          <div className="text-sm mt-1">
+          <h1 className="font-serif text-4xl mt-1">Web activity</h1>
+          <div className="text-sm mt-1 text-ink-2">
             <strong>{fromIso}</strong> – <strong>{toIso}</strong> ·{' '}
             {formatDurationShort(totalSec)} across {domains.length} domains ·{' '}
             {uniqueCats} categories
@@ -80,7 +86,7 @@ export function WebReport() {
         </div>
         <button
           onClick={print}
-          className="report-no-print px-4 py-2 bg-black text-white rounded text-sm"
+          className="report-no-print px-4 py-2 bg-accent text-[#0b0c10] rounded text-sm font-medium hover:bg-accent-2"
         >
           Print
         </button>
