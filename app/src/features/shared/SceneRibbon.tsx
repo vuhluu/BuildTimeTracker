@@ -22,21 +22,24 @@ export function SceneRibbon({
     );
   }
 
-  const sorted = [...sessions].sort(
-    (a, b) =>
-      new Date(a.startedAt).getTime() - new Date(b.startedAt).getTime(),
-  );
+  const display = [...sessions]
+    .sort(
+      (a, b) =>
+        new Date(a.startedAt).getTime() - new Date(b.startedAt).getTime(),
+    )
+    .map((session, index) => ({ session, index }))
+    .reverse();
 
   return (
     <ol className="list-none p-0 m-0 border-t border-line">
-      {sorted.map((s, i) => (
+      {display.map(({ session, index }) => (
         <SceneCard
-          key={s.id}
-          session={s}
-          index={i}
+          key={session.id}
+          session={session}
+          index={index}
           nowMs={nowMs}
-          selected={selectedId === s.id}
-          onClick={() => onSelect(s.id)}
+          selected={selectedId === session.id}
+          onClick={() => onSelect(session.id)}
         />
       ))}
     </ol>

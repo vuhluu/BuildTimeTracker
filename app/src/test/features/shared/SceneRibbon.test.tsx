@@ -53,7 +53,7 @@ describe('SceneRibbon', () => {
       />,
     );
     const items = container.querySelectorAll('li');
-    expect(items[0].dataset.selected).toBe('false');
-    expect(items[1].dataset.selected).toBe('true');
+    expect(items[0].dataset.selected).toBe('true');
+    expect(items[1].dataset.selected).toBe('false');
   });
 });

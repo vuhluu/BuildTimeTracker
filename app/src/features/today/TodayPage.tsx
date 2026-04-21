@@ -106,8 +106,8 @@ export function TodayPage() {
         const order = [...filteredSessions]
           .sort(
             (a, b) =>
-              new Date(a.startedAt).getTime() -
-              new Date(b.startedAt).getTime(),
+              new Date(b.startedAt).getTime() -
+              new Date(a.startedAt).getTime(),
           )
           .map((s) => s.id);
         if (order.length === 0) return;

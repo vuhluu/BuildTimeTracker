@@ -4,8 +4,6 @@ Personal task timer that correlates self-reported tasks with [ActivityWatch](htt
 
 ## Design & live demo
 
-The UI is **Direction D** of a four-direction design exploration. The mockup below is a single self-contained HTML file with baked-in mock data — no build step required — and shows the same layout, interactions, and visual system as the app you run locally.
-
 - **👉 Interactive mockup:** https://vuhluu.github.io/BuildTimeTracker/design-mockup.html
 - **Source:** [`design-mockup.html`](./design-mockup.html) at the repo root.
 
@@ -134,3 +132,7 @@ src/
 - **`vi.clearAllMocks()` vs `vi.restoreAllMocks()`:** Global `afterEach` must use `vi.clearAllMocks()`, not `vi.restoreAllMocks()`. The latter wipes `vi.fn()` implementations between tests.
 - **zustand v5 selector equality:** zustand v5 uses `Object.is` for selector equality. Returning inline derived arrays/objects from selectors causes infinite re-renders. Select raw store slices and derive with `useMemo`.
 - **Mocking `Date.now` in component tests:** `vi.spyOn(Date, 'now').mockReturnValue(...)` mocks the primitive but not `new Date()` without args. Components that need a deterministic "now" should read via `new Date(Date.now())` or accept `now` as a prop.
+
+## License
+
+MIT — see [LICENSE](LICENSE).

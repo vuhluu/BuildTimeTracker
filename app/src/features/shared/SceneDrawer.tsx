@@ -279,7 +279,10 @@ export function SceneDrawer({ session, nowMs, onClose }: SceneDrawerProps) {
           </button>
         ) : (
           <button
-            onClick={() => startTask(session.name)}
+            onClick={() => {
+              startTask(session.name);
+              onClose();
+            }}
             className="ml-auto px-3 py-1.5 rounded-lg text-xs font-medium bg-accent text-[#0b0c10] border border-transparent hover:bg-accent-2"
           >
             Resume
